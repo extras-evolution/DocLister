@@ -2,8 +2,6 @@
 if (!defined('MODX_BASE_PATH')) {
     die('HACK???');
 }
-error_reporting(E_ALL);
-ini_set('display_errors','On');
 /**
  * DocLister class
  *
@@ -28,7 +26,7 @@ abstract class DocLister
     /**
      * Текущая версия ядра DocLister
      */
-    const VERSION = '1.1.9';
+    const VERSION = '1.1.15';
 
     /**
      * Ключ в массиве $_REQUEST в котором находится алиас запрашиваемого документа
@@ -241,7 +239,7 @@ abstract class DocLister
             if($this->_debugMode>0){
                 if(isset($_SESSION['usertype']) && $_SESSION['usertype']=='manager'){
                     error_reporting(E_ALL);
-                    ini_set('display_errors','On');
+                    ini_set('display_errors', 1);
                 }
                 $dir = dirname(dirname(__FILE__));
                 if (file_exists($dir . "/lib/debugDL.class.php")) {
@@ -255,6 +253,8 @@ abstract class DocLister
             if(is_null($this->debug)){
                 $this->debug = new xNop();
                 $this->_debugMode = 0;
+				error_reporting(0);
+                ini_set('display_errors',0);
             }
         }
     }
@@ -1049,15 +1049,15 @@ abstract class DocLister
         $this->debug->debug('set ID list '.$this->debug->dumpData($IDs), 'setIDs', 2);
         $IDs = $this->cleanIDs($IDs);
         $type = $this->getCFGDef('idType', 'parents');
-        $depth = $this->getCFGDef('depth', '1');
-        if ($type == 'parents' && $depth > 1) {
+        $depth = $this->getCFGDef('depth', '');
+        if ($type == 'parents' && $depth > 0) {
             $tmp = $IDs;
             do {
                 if (count($tmp) > 0) {
                     $tmp = $this->getChildernFolder($tmp);
                     $IDs = array_merge($IDs, $tmp);
                 }
-            } while ((--$depth) > 1);
+            } while ((--$depth) > 0);
         }
         $this->debug->debugEnd("setIDs");
         return ($this->IDs = $IDs);
@@ -1159,7 +1159,7 @@ abstract class DocLister
             }
             case 'doclist':{
                 $idList = $this->sanitarIn($this->IDs,',', false);
-                $out['orderBy'] = "find_in_set({$this->getPK()}, '{$idList}')";
+                $out['orderBy'] = "FIND_IN_SET({$this->getPK()}, '{$idList}')";
                 $this->setConfig($out); //reload config;
                 $sort = "ORDER BY ".$out['orderBy'];
                 break;
@@ -1337,6 +1337,40 @@ abstract class DocLister
         }
         $this->debug->debug('getFilter');
         return $output;
+    }
+
+    /**
+     * Приведение типа поля
+     *
+     * @param $field string имя поля
+     * @param $type string тип фильтрации
+     * @return string имя поля с учетом приведения типа
+     */
+    public function changeSortType($field, $type){
+        $type = trim($type);
+        switch(strtoupper($type)){
+            case 'DECIMAL':{
+                $field = 'CAST('.$field.' as DECIMAL(10,2))';
+                break;
+            }
+            case 'UNSIGNED':{
+                $field = 'CAST('.$field.' as UNSIGNED)';
+                break;
+            }
+            case 'BINARY':{
+                $field = 'CAST('.$field.' as BINARY)';
+                break;
+            }
+            case 'DATETIME':{
+                $field = 'CAST('.$field.' as DATETIME)';
+                break;
+            }
+            case 'SIGNED':{
+                $field = 'CAST('.$field.' as SIGNED)';
+                break;
+            }
+        }
+        return $field;
     }
 
     /**
