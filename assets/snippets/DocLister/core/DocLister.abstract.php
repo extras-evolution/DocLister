@@ -19,6 +19,7 @@ if (!defined('MODX_BASE_PATH')) {
  */
 
 require_once(dirname(dirname(__FILE__))."/lib/jsonHelper.class.php");
+require_once(dirname(dirname(__FILE__))."/lib/sqlHelper.class.php");
 require_once(dirname(dirname(__FILE__)). "/lib/xnop.class.php");
 
 abstract class DocLister
@@ -26,7 +27,7 @@ abstract class DocLister
     /**
      * Текущая версия ядра DocLister
      */
-    const VERSION = '1.1.15';
+    const VERSION = '1.2.0';
 
     /**
      * Ключ в массиве $_REQUEST в котором находится алиас запрашиваемого документа
@@ -894,6 +895,7 @@ abstract class DocLister
      */
     public function parseChunk($name, $data)
     {
+        $out = null;
         $this->debug->debug(
             "parseChunk ".$this->debug->dumpData($name)." ".$this->debug->dumpData($data),
             "parseChunk",
@@ -1062,7 +1064,7 @@ abstract class DocLister
         $this->debug->debugEnd("setIDs");
         return ($this->IDs = $IDs);
     }
-
+	
     /**
      * Очистка данных и уникализация списка цифр.
      * Если был $IDs был передан как строка, то эта строка будет преобразована в массив по разделителю $sep
@@ -1195,6 +1197,7 @@ abstract class DocLister
         return $sort;
     }
 
+	
     /**
      * Получение LIMIT вставки в SQL запрос
      *
@@ -1305,15 +1308,18 @@ abstract class DocLister
     protected function getFilters($filter_string){
         $this->debug->debug("getFilters: ".$this->debug->dumpData($filter_string),'getFilter',1);
         // the filter parameter tells us, which filters can be used in this query
-        $filter_string = trim($filter_string);
+        $filter_string = trim($filter_string, ' ;');
         if (!$filter_string) return;
         $output = array('join' => '', 'where'=>'');
         $logic_op_found = false;
+        if(substr($filter_string,-1)==')'){
+            $filter_string = mb_substr($filter_string, 0, -1, "UTF-8");
+        }
         foreach ($this->_logic_ops as $op => $sql){
             if (strpos($filter_string, $op) === 0){
                 $logic_op_found = true;
-                $subfilters = substr($filter_string, strlen($op)+1, -1);
-                $subfilters = explode(';', $subfilters);
+                $subfilters = mb_substr($filter_string, strlen($op)+1, mb_strlen($filter_string,"UTF-8"), "UTF-8");
+                $subfilters = explode(';', rtrim($subfilters,";"));
                 foreach ($subfilters as $subfilter){
                     $subfilter = $this->getFilters(trim($subfilter));
                     if (!$subfilter) continue;
@@ -1411,6 +1417,7 @@ abstract class DocLister
     public function getCountFilters(){
         return (int)$this->totalFilters;
     }
+
     /**
      * Выполнить SQL запрос
      * @param string $q SQL запрос
@@ -1433,20 +1440,7 @@ abstract class DocLister
      * @return string строка для подстановки в SQL запрос
      */
     public function LikeEscape($field, $value, $escape='=', $tpl='%[+value+]%'){
-        $str = '';
-        if(!empty($field) && is_string($field) && is_scalar($value) && $value!==''){
-            if(is_scalar($escape) && !empty($escape) && !in_array($escape,array("_", "%", "'"))){
-                $str = str_replace(array($escape, '_', '%'), array($escape.$escape, $escape.'_', $escape.'%'), $value);
-                $str = $this->modx->db->escape($str);
-                $str = str_replace('[+value+]', $str, $tpl);
-                $str = "{$field} LIKE '{$str}' ESCAPE '{$escape}'";
-            }else{
-                $this->debug->error("Error LikeEscape escaping: '{$this->debug->dumpData($escape)}'", 'LikeEscape');
-            }
-        }else{
-            $this->debug->error("Error LikeEscape parameters. Field: '{$this->debug->dumpData($field)}' or value: '{$this->debug->dumpData($value)}'", 'LikeEscape');
-        }
-        return $str;
+        return sqlHelper::LikeEscape($this->modx, $field,$value,$escape, $tpl);
     }
 
     /**
