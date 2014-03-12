@@ -99,17 +99,24 @@ class onetableDocLister extends DocLister
                     }
 
                     $class = array();
-                    $class[] = ($i % 2 == 0) ? 'odd' : 'even';
+					
+					$subTpl = $this->getCFGDef('tplId'.$i, $tpl);
+					
+                    $iterationName = ($i % 2 == 0) ? 'Odd' : 'Even';
+					$class[] = strtolower($iterationName);
+					
+					$subTpl = $this->getCFGDef('tpl'.$iterationName, $subTpl);
+					
                     if ($i == 1) {
-                        $subTpl = $this->getCFGDef('tplFirst', $tpl);
+                        $subTpl = $this->getCFGDef('tplFirst', $subTpl);
                         $class[] = 'first';
                     }
                     if ($i == count($this->_docs)) {
-                        $subTpl = $this->getCFGDef('tplLast', $tpl);
+                        $subTpl = $this->getCFGDef('tplLast', $subTpl);
                         $class[] = 'last';
                     }
                     if ($this->modx->documentIdentifier == $item['id']) {
-                        $subTpl = $this->getCFGDef('tplCurrent', $tpl);
+                        $subTpl = $this->getCFGDef('tplCurrent', $subTpl);
                         $item[$this->getCFGDef("sysKey", "dl") . '.active'] = 1; //[+active+] - 1 if $modx->documentIdentifer equal ID this element
                         $class[] = 'current';
                     } else {
@@ -190,7 +197,9 @@ class onetableDocLister extends DocLister
                 $where = "WHERE ".implode(" AND ",$where);
             }
             $limit = $this->LimitSQL($this->getCFGDef('queryLimit', 0));
-            $rs = $this->dbQuery("SELECT * FROM {$this->table} {$where} {$this->SortOrderSQL($this->getPK())} {$limit}");
+			$fields = $this->getCFGDef('selectFields', '*');
+			$group = $this->getGroupSQL($this->getCFGDef('groupBy', ''));
+            $rs = $this->dbQuery("SELECT {$fields} FROM {$this->table} {$where} {$group} {$this->SortOrderSQL($this->getPK())} {$limit}");
 
             $rows = $this->modx->db->makeArray($rs);
             $out = array();
@@ -204,13 +213,26 @@ class onetableDocLister extends DocLister
     // @abstract
     public function getChildrenCount()
     {
-        $where = $this->getCFGDef('addWhereList', '');
-        $fields = "count(`{$this->getPK()}`) as `count`";
-        if(!empty($where)){
-            $where = "WHERE ".$where;
+        $out = 0;
+        $sanitarInIDs = $this->sanitarIn($this->IDs);
+        if ($sanitarInIDs != "''" || $this->getCFGDef('ignoreEmpty', '0')) {
+            $where = $this->getCFGDef('addWhereList', '');
+            if ($where != '') {
+                $where = array($where);
+            }
+            if($sanitarInIDs != "''"){
+                $where[] = "{$this->getPK()} IN ({$sanitarInIDs})";
+            }
+            if(!empty($where)){
+                $where = "WHERE ".implode(" AND ",$where);
+            }
+            
+			$group = $this->getGroupSQL($this->getCFGDef('groupBy', ''));
+            $rs = $this->dbQuery("SELECT count(*) FROM (SELECT count(*) FROM {$this->table} {$where} {$group}) as `tmp`");
+			
+            $out = $this->modx->db->getValue($rs);
         }
-        $rs = $this->dbQuery("SELECT {$fields} FROM {$this->table} {$where}");
-        return $this->modx->db->getValue($rs);
+        return $out;
     }
 
     public function getChildernFolder($id)

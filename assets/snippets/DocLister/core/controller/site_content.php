@@ -159,7 +159,7 @@ class site_contentDocLister extends DocLister
                     $item['iteration'] = $i; //[+iteration+] - Number element. Starting from zero
                     $item[$this->getCFGDef("sysKey", "dl") . '.full_iteration'] = ($this->extPaginate) ? ($i + $this->getCFGDef('display', 0) * ($this->extPaginate->currentPage()-1)) : $i;
 
-                    $item['url'] = ($item['type'] == 'reference') ? $item['content'] : $this->modx->makeUrl($item['id']);
+                    $item['url'] = ($item['type'] == 'reference') ? (is_numeric($item['content']) ? $this->modx->makeUrl($item['content']) : $item['content']) : $this->modx->makeUrl($item['id']);
 
                     $item['date'] = (isset($item[$date]) && $date != 'createdon' && $item[$date] != 0 && $item[$date] == (int)$item[$date]) ? $item[$date] : $item['createdon'];
                     $item['date'] = $item['date'] + $this->modx->config['server_offset_time'];
@@ -168,17 +168,24 @@ class site_contentDocLister extends DocLister
                     }
 
                     $class = array();
-                    $class[] = ($i % 2 == 0) ? 'odd' : 'even';
-                    if ($i == 1) {
-                        $subTpl = $this->getCFGDef('tplFirst', $tpl);
+					
+					$subTpl = $this->getCFGDef('tplId'.$i, $tpl);
+
+                    $iterationName = ($i % 2 == 0) ? 'Odd' : 'Even';
+					$class[] = strtolower($iterationName);
+					
+					$subTpl = $this->getCFGDef('tpl'.$iterationName, $subTpl);
+					
+					if ($i == 1) {
+                        $subTpl = $this->getCFGDef('tplFirst', $subTpl);
                         $class[] = 'first';
                     }
                     if ($i == count($this->_docs)) {
-                        $subTpl = $this->getCFGDef('tplLast', $tpl);
+                        $subTpl = $this->getCFGDef('tplLast', $subTpl);
                         $class[] = 'last';
                     }
                     if ($this->modx->documentIdentifier == $item['id']) {
-                        $subTpl = $this->getCFGDef('tplCurrent', $tpl);
+                        $subTpl = $this->getCFGDef('tplCurrent', $subTpl);
                         $item[$this->getCFGDef("sysKey", "dl") . '.active'] = 1; //[+active+] - 1 if $modx->documentIdentifer equal ID this element
                         $class[] = 'current';
                     } else {
@@ -287,7 +294,7 @@ class site_contentDocLister extends DocLister
                     }
                 }
             }
-            $fields = 'count(c.`id`) as `count`';
+            $fields = $this->getCFGDef('selectFields', 'c.*');
             $from = $tbl_site_content . " " . $this->_filters['join'];
             $where = sqlHelper::trimLogicalOp($where);
 
@@ -301,7 +308,11 @@ class site_contentDocLister extends DocLister
             if(trim($where)=='WHERE'){
                 $where = '';
             }
-            $rs = $this->dbQuery("SELECT {$fields} FROM {$from} {$where}");
+            $group = $this->getGroupSQL($this->getCFGDef('groupBy', 'c.id'));
+            $sort = $this->SortOrderSQL("if(c.pub_date=0,c.createdon,c.pub_date)");
+            list($from, $sort) = $this->injectSortByTV($from, $sort);
+
+            $rs = $this->dbQuery("SELECT count(*) FROM (SELECT count(*) FROM {$from} {$where} {$group}) as `tmp`");
             $out = $this->modx->db->getValue($rs);
         }
         return $out;
@@ -340,14 +351,14 @@ class site_contentDocLister extends DocLister
             }
 
 
-            $select = "c.*";
-
+            $fields = $this->getCFGDef('selectFields', 'c.*');
+            $group = $this->getGroupSQL($this->getCFGDef('groupBy', 'c.id'));
             $sort = $this->SortOrderSQL("if(c.pub_date=0,c.createdon,c.pub_date)");
             list($tbl_site_content, $sort) = $this->injectSortByTV($tbl_site_content, $sort);
 
             $limit = $this->LimitSQL($this->getCFGDef('queryLimit', 0));
 
-            $rs = $this->dbQuery("SELECT {$select} FROM {$tbl_site_content} {$this->_filters['join']} {$where} GROUP BY c.id {$sort} {$limit}");
+            $rs = $this->dbQuery("SELECT {$fields} FROM {$tbl_site_content} {$this->_filters['join']} {$where} {$group} {$sort} {$limit}");
 
             $rows = $this->modx->db->makeArray($rs);
 

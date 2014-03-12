@@ -27,7 +27,7 @@ abstract class DocLister
     /**
      * Текущая версия ядра DocLister
      */
-    const VERSION = '1.2.0';
+    const VERSION = '1.2.5';
 
     /**
      * Ключ в массиве $_REQUEST в котором находится алиас запрашиваемого документа
@@ -211,7 +211,7 @@ abstract class DocLister
         }
         $this->_filters = $this->getFilters($this->getCFGDef('filters', ''));
     }
-
+	
     /**
      * Установить время запуска сниппета
      * @param float|null $time
@@ -239,7 +239,7 @@ abstract class DocLister
             $this->debug = null;
             if($this->_debugMode>0){
                 if(isset($_SESSION['usertype']) && $_SESSION['usertype']=='manager'){
-                    error_reporting(E_ALL);
+                    error_reporting(E_ALL ^ E_NOTICE);
                     ini_set('display_errors', 1);
                 }
                 $dir = dirname(dirname(__FILE__));
@@ -280,7 +280,7 @@ abstract class DocLister
         }
         $table = $this->_table[$name];
         if(!empty($alias) && is_scalar($alias)){
-            $table .= " as ".$alias;
+            $table .= " as `".$alias."`";
         }
         return $table;
     }
@@ -1065,6 +1065,9 @@ abstract class DocLister
         return ($this->IDs = $IDs);
     }
 	
+	final public function getIDs(){
+		return $this->IDs;
+	}
     /**
      * Очистка данных и уникализация списка цифр.
      * Если был $IDs был передан как строка, то эта строка будет преобразована в массив по разделителю $sep
@@ -1138,6 +1141,13 @@ abstract class DocLister
      */
     abstract public function getChildernFolder($id);
 
+	protected function getGroupSQL($group = ''){
+		$out = '';
+		if($group!=''){
+			$out = 'GROUP BY '.$group;
+		}
+		return $out;
+	}
     /**
      *    Sorting method in SQL queries
      *
@@ -1242,7 +1252,11 @@ abstract class DocLister
      */
     final public function sanitarData($data)
     {
-        return is_scalar($data) ? str_replace(array('[', '%5B', ']', '%5D', '{', '%7B', '}', '%7D'), array('&#91;', '&#91;', '&#93;', '&#93;', '&#123;', '&#123;', '&#125;', '&#125;'), htmlspecialchars($data)) : '';
+        return is_scalar($data) ? str_replace(
+									array('[', '%5B', ']', '%5D', '{', '%7B', '}', '%7D'), 
+									array('&#91;', '&#91;', '&#93;', '&#93;', '&#123;', '&#123;', '&#125;', '&#125;'), 
+									htmlspecialchars($data, ENT_COMPAT, 'UTF-8', false)
+								) : '';
     }
 
     /**
@@ -1345,6 +1359,13 @@ abstract class DocLister
         return $output;
     }
 
+	public function filtersWhere(){
+		return isset($this->_filters['where']) ? $this->_filters['where'] : '';
+	}
+	
+	public function filtersJoin(){
+		return isset($this->_filters['join']) ? $this->_filters['join'] : '';
+	}
     /**
      * Приведение типа поля
      *
