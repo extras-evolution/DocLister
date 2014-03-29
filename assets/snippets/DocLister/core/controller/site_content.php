@@ -31,12 +31,9 @@ class site_contentDocLister extends DocLister
 
     protected $extPaginate = null;
     
-    function __construct($modx, $cfg = array()){
-        parent::__construct($modx,$cfg);
-        $this->extTV = $this->getExtender('tv', true);
-        if(!$this->extTV){
-            die('Error');
-        }
+    function __construct($modx, $cfg = array(), $startTime = null){
+        parent::__construct($modx,$cfg, $startTime);
+        $this->extTV = $this->getExtender('tv', true, true);
     }
     /**
      * @absctract
@@ -74,7 +71,10 @@ class site_contentDocLister extends DocLister
         $type = $this->getCFGDef('idType', 'parents');
         $this->_docs = ($type == 'parents') ? $this->getChildrenList() : $this->getDocList();
         if ($tvlist != '' && count($this->_docs)>0) {
-            $tv = ($this->extTV) ? $this->extTV->getTVList(array_keys($this->_docs),$tvlist) : array();
+            $tv = $this->extTV->getTVList(array_keys($this->_docs),$tvlist);
+            if(!is_array($tv)){
+                $tv = array();
+            }
             foreach ($tv as $docID => $TVitem) {
                 if (isset($this->_docs[$docID]) && is_array($this->_docs[$docID])) {
                     $this->_docs[$docID] = array_merge($this->_docs[$docID], $TVitem);
@@ -283,7 +283,9 @@ class site_contentDocLister extends DocLister
             if($sanitarInIDs != "''"){
                 switch($this->getCFGDef('idType', 'parents')){
                     case 'parents':{
-                        if(!$this->getCFGDef('showParent', '0')) {
+                        if($this->getCFGDef('showParent', '0')) {
+                            $whereArr[]="(c.parent IN ({$sanitarInIDs}) OR c.id IN({$sanitarInIDs}))";
+                        }else{
                             $whereArr[]="c.parent IN ({$sanitarInIDs}) AND c.id NOT IN({$sanitarInIDs})";
                         }
                         break;
@@ -354,11 +356,11 @@ class site_contentDocLister extends DocLister
             $fields = $this->getCFGDef('selectFields', 'c.*');
             $group = $this->getGroupSQL($this->getCFGDef('groupBy', 'c.id'));
             $sort = $this->SortOrderSQL("if(c.pub_date=0,c.createdon,c.pub_date)");
-            list($tbl_site_content, $sort) = $this->injectSortByTV($tbl_site_content, $sort);
+            list($tbl_site_content, $sort) = $this->injectSortByTV($tbl_site_content.' '.$this->_filters['join'], $sort);
 
             $limit = $this->LimitSQL($this->getCFGDef('queryLimit', 0));
 
-            $rs = $this->dbQuery("SELECT {$fields} FROM {$tbl_site_content} {$this->_filters['join']} {$where} {$group} {$sort} {$limit}");
+            $rs = $this->dbQuery("SELECT {$fields} FROM {$tbl_site_content} {$where} {$group} {$sort} {$limit}");
 
             $rows = $this->modx->db->makeArray($rs);
 
@@ -400,31 +402,11 @@ class site_contentDocLister extends DocLister
     }
 
     protected function injectSortByTV($table, $sort){
-        if (preg_match("/^ORDER BY (.*)/", $sort, $match)) {
-            $TVnames = $this->extTV ? $this->extTV->getTVnames() : array();
-            $matches = explode(",", $match[1]);
-            $sortType = explode(",", $this->getCFGDef('tvSortType'));
-            $withDefault = explode(",", $this->getCFGDef('tvSortWithDefault'));
-
-            foreach($matches as $i => &$item){
-                $item = explode(" ", trim($item), 2);
-                if (isset($TVnames[$item[0]])) {
-                    $prefix = 'tv'.$i;
-                    $table .= " LEFT JOIN " . $this->getTable("site_tmplvar_contentvalues", $prefix) . "
-                        on ".$prefix.".contentid=c.id AND ".$prefix.".tmplvarid=" . $TVnames[$item[0]];
-                    if(in_array($item[0], $withDefault)){
-                        $table .= " LEFT JOIN ".$this->getTable("site_tmplvars", 'd'.$prefix)." on d".$prefix.".id = " . $TVnames[$item[0]];
-                        $field = "IFNULL(`{$prefix}`.`value`, `d{$prefix}`.`default_text`)";
-                    }else{
-                        $field = "`{$prefix}`.`value`";
-                    }
-                    $item[0] = $this->changeSortType($field, isset($sortType[$i]) ? $sortType[$i] : null);
-                }
-                $item = implode(" ", $item);
-            }
-            $sort = "ORDER BY ".implode(",", $matches);
+        $out = $this->getExtender('tv', true, true)->injectSortByTV($table, $sort);
+        if(!is_array($out) || empty($out)){
+            $out = array($table, $sort);
         }
-        return array($table, $sort);
+        return $out;
     }
 
     /**
@@ -446,13 +428,13 @@ class site_contentDocLister extends DocLister
         $tbl_site_content = $this->getTable('site_content','c');
 
         $sort = $this->SortOrderSQL("if(c.pub_date=0,c.createdon,c.pub_date)");
-        list($tbl_site_content, $sort) = $this->injectSortByTV($tbl_site_content, $sort);
+        list($from, $sort) = $this->injectSortByTV($tbl_site_content.' '.$this->_filters['join'], $sort);
 
         $where = "WHERE {$where} c.parent IN (" . $this->sanitarIn($this->IDs) . ")";
         if(!$this->getCFGDef('showNoPublish', 0)){
             $where .= " AND c.deleted=0 AND c.published=1";
         }
-        $sql = $this->dbQuery("SELECT DISTINCT c.* FROM ".$tbl_site_content." ".$this->_filters['join']." ".$where." ".
+        $sql = $this->dbQuery("SELECT DISTINCT c.* FROM ".$from." ".$where." ".
                 (($this->getCFGDef('showParent', '0')) ? "" : "AND c.id NOT IN(" . $this->sanitarIn($this->IDs) . ") ") .
                 $sort . " " .
                 $this->LimitSQL($this->getCFGDef('queryLimit', 0))
@@ -463,5 +445,19 @@ class site_contentDocLister extends DocLister
             $out[$item['id']] = $item;
         }
         return $out;
+    }
+
+    public function changeSortType($field, $type){
+        $type = trim($type);
+        switch(strtoupper($type)){
+            case 'TVDATETIME':{
+                $field = "STR_TO_DATE(".$field.",'%d-%m-%Y %H:%i:%s')";
+                break;
+            }
+            default:{
+                $field = parent::changeSortType($field, $type);
+            }
+        }
+        return $field;
     }
 }

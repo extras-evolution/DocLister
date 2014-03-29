@@ -5,11 +5,13 @@
 Правила для обработки информации описаны в контроллерах.
 Главный контроллер - **site_content** который определяет связь основных документов site_content с данными в TV-параметрах
 
-На базе класса DocLister сформировано 4 сниппета:
+На базе класса DocLister сформировано 6 сниппетов:
 * **DocLister** - основной сниппет для вывода информации по принципу сниппетов Ditto и CatalogView
 * **DLcrumbs** - для формирования хлебных крошек по принципу сниппета Breadcrumbs
 * **DLglossary** - для фильтрации документов по первому символу в определенном поле
 * **DLvaluelist** - для замены сниппета DropDownDocs
+* **DLTemplate** - для замены $modx->parseChunk()
+* **DLFirstChar** - выборка документов и группировках в блоках по первой букве
 
 ### Полезные ссылки
 ---------
@@ -51,8 +53,10 @@
 <td valign="top">
 <h4>За помощь в разработке<br /><br /></h4>
 <ul>
-<li><a href="https://github.com/kabachello">@kabachello</a> - фильтрация по TV-параметрам</li>
-<li><a href="https://github.com/Pathologic">@Pathologic</a> - экстендер jotcount</li>
+<li><a href="https://github.com/kabachello">@kabachello</a><br />
+фильтрация по TV-параметрам</li>
+<li><a href="https://github.com/Pathologic">@Pathologic</a><br />
+экстендер jotcount</li>
 </ul>
 </td>
 <td valign="top">
@@ -61,6 +65,7 @@
 <li><a href="https://github.com/Pathologic">@Pathologic</a></li>
 <li><a href="http://modx.im/profile/Shin/">Shin</a></li>
 <li><a href="https://github.com/webber12">@webber12</a></li>
+<li><a href="http://blog.agel-nash.ru/user/diosmedia">Иван Смирнягин</a></li>
 </ul>
 </td>
 <td valign="top">

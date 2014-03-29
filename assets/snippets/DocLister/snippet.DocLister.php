@@ -8,12 +8,13 @@
 if (!defined('MODX_BASE_PATH')) {
     die('HACK???');
 }
-$time = $modx->getMicroTime();
-$dir = realpath(MODX_BASE_PATH . (isset($dir) ? $dir : 'assets/snippets/DocLister/'));
+$_time = microtime(true);
+$DLDir = 'assets/snippets/DocLister/';
+$DLDir = realpath(MODX_BASE_PATH . $DLDir);
 
-require_once($dir . "/core/DocLister.abstract.php");
-require_once($dir . "/core/extDocLister.abstract.php");
-require_once($dir . "/core/filterDocLister.abstract.php");
+require_once($DLDir . "/core/DocLister.abstract.php");
+require_once($DLDir . "/core/extDocLister.abstract.php");
+require_once($DLDir . "/core/filterDocLister.abstract.php");
 
 if (isset($controller)) {
     preg_match('/^(\w+)$/iu', $controller, $controller);
@@ -22,18 +23,22 @@ if (isset($controller)) {
     $controller = "site_content";
 }
 $classname = $controller . "DocLister";
-if ($classname != 'DocLister' && file_exists($dir . "/core/controller/" . $controller . ".php") && !class_exists($classname, false)) {
-    require_once($dir . "/core/controller/" . $controller . ".php");
+$dir = isset($dir) ? $dir : $DLDir."/core/controller/";
+if ($classname != 'DocLister' && file_exists($dir . $controller . ".php") && !class_exists($classname, false)) {
+    require_once($dir . $controller . ".php");
 }
 
 if (class_exists($classname, false) && $classname != 'DocLister') {
-    $DocLister = new $classname($modx, $modx->Event->params);
-    $DocLister->setTimeStart($time);
+    $DocLister = new $classname($modx, $modx->Event->params, $_time);
     $data = $DocLister->getDocs();
     $out = isset($modx->Event->params['api']) ? $DocLister->getJSON($data, $modx->Event->params['api']) : $DocLister->render();
     if(isset($_SESSION['usertype']) && $_SESSION['usertype']=='manager'){
-        echo $DocLister->debug->showLog();
+        $debug = $DocLister->debug->showLog();
+    }else{
+        $debug = '';
+    }
+    if(!empty($modx->Event->params['debug'])){
+        $out = ($modx->Event->params['debug']>0) ? $debug.$out : $out.$debug;
     }
     return $out;
 }
-?>
