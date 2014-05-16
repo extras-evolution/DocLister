@@ -7,7 +7,7 @@
  * To change this template use File | Settings | File Templates.
  */
 
-class debugDL{
+class DLdebug{
     private $_log = array();
     private $_calcLog = array();
 
