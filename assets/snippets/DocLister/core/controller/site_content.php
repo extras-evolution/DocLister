@@ -141,13 +141,8 @@ class site_contentDocLister extends DocLister
                         $item = $extUser->setUserData($item); //[+user.id.createdby+], [+user.fullname.publishedby+], [+dl.user.publishedby+]....
                     }
 
-                    if ($extSummary) {
-                        if (mb_strlen($item['introtext'], 'UTF-8') > 0) {
-                            $item['summary'] = $item['introtext'];
-                        } else {
-                            $item['summary'] = $extSummary->init($this, array("content" => $item['content'], "summary" => $this->getCFGDef("summary", "")));
-                        }
-                    }
+					$item['summary'] = $extSummary ? $this->getSummary($item, $extSummary, 'introtext', 'content') : '';
+					
                     if ($extJotCount) {
 						$item['jotcount'] = isset($comments[$item['id']]) ? $comments[$item['id']] : 0;
                     }
@@ -155,7 +150,8 @@ class site_contentDocLister extends DocLister
 
                     $item = array_merge($item, $sysPlh); //inside the chunks available all placeholders set via $modx->toPlaceholders with prefix id, and with prefix sysKey
                     $item['title'] = ($item['menutitle'] == '' ? $item['pagetitle'] : $item['menutitle']);
-
+					$item['e.title'] = htmlentities($item['title'], ENT_COMPAT, 'UTF-8', false);
+					
                     $item['iteration'] = $i; //[+iteration+] - Number element. Starting from zero
                     $item[$this->getCFGDef("sysKey", "dl") . '.full_iteration'] = ($this->extPaginate) ? ($i + $this->getCFGDef('display', 0) * ($this->extPaginate->currentPage()-1)) : $i;
 
@@ -198,6 +194,9 @@ class site_contentDocLister extends DocLister
                     }
                     if($extPrepare){
                         $item = $extPrepare->init($this, $item);
+                        if(is_bool($item) && $item === false){
+                            continue;
+                        }
                     }
                     $tmp = $this->parseChunk($subTpl, $item);
 
@@ -223,7 +222,7 @@ class site_contentDocLister extends DocLister
 
         return $this->toPlaceholders($out);
     }
-
+	
     public function getJSON($data, $fields, $array = array())
     {
         $out = array();
@@ -237,7 +236,7 @@ class site_contentDocLister extends DocLister
 
         foreach ($data as $num => $item) {
             switch (true) {
-                case ((array('1') == $fields || in_array('summary', $fields)) && $extSummary):
+				case ((array('1') == $fields || in_array('summary', $fields)) && $extSummary):
                 {
                     $out[$num]['summary'] = (mb_strlen($this->_docs[$num]['introtext'], 'UTF-8') > 0) ? $this->_docs[$num]['introtext'] : $extSummary->init($this, array("content" => $this->_docs[$num]['content'], "summary" => $this->getCFGDef("summary", "")));
                     //without break
@@ -284,10 +283,17 @@ class site_contentDocLister extends DocLister
                 switch($this->getCFGDef('idType', 'parents')){
                     case 'parents':{
                         if($this->getCFGDef('showParent', '0')) {
-                            $whereArr[]="(c.parent IN ({$sanitarInIDs}) OR c.id IN({$sanitarInIDs}))";
+                            $tmpWhere="(c.parent IN ({$sanitarInIDs}) OR c.id IN({$sanitarInIDs}))";
                         }else{
-                            $whereArr[]="c.parent IN ({$sanitarInIDs}) AND c.id NOT IN({$sanitarInIDs})";
+                            $tmpWhere="c.parent IN ({$sanitarInIDs}) AND c.id NOT IN({$sanitarInIDs})";
                         }
+                        if(($addDocs = $this->getCFGDef('documents', '')) != ''){
+                            $addDocs = $this->sanitarIn($this->cleanIDs($addDocs));
+                            $whereArr[] = "((".$tmpWhere.") OR c.id IN({$addDocs}))";
+                        }else{
+                            $whereArr[] = $tmpWhere;
+                        }
+
                         break;
                     }
                     case 'documents':{
@@ -430,13 +436,20 @@ class site_contentDocLister extends DocLister
         $sort = $this->SortOrderSQL("if(c.pub_date=0,c.createdon,c.pub_date)");
         list($from, $sort) = $this->injectSortByTV($tbl_site_content.' '.$this->_filters['join'], $sort);
 
-        $where = "WHERE {$where} c.parent IN (" . $this->sanitarIn($this->IDs) . ")";
+        $tmpWhere = "c.parent IN (" . $this->sanitarIn($this->IDs) . ")";
+        $tmpWhere .= (($this->getCFGDef('showParent', '0')) ? "" : " AND c.id NOT IN(" . $this->sanitarIn($this->IDs) . ")");
+
+        if(($addDocs = $this->getCFGDef('documents', '')) != ''){
+            $addDocs = $this->sanitarIn($this->cleanIDs($addDocs));
+            $tmpWhere = "((".$tmpWhere.") OR c.id IN({$addDocs}))";
+        }
+        $where = "WHERE {$where} {$tmpWhere}";
         if(!$this->getCFGDef('showNoPublish', 0)){
             $where .= " AND c.deleted=0 AND c.published=1";
         }
+
         $fields = $this->getCFGDef('selectFields', 'c.*');
         $sql = $this->dbQuery("SELECT DISTINCT {$fields} FROM ".$from." ".$where." ".
-                (($this->getCFGDef('showParent', '0')) ? "" : "AND c.id NOT IN(" . $this->sanitarIn($this->IDs) . ") ") .
                 $sort . " " .
                 $this->LimitSQL($this->getCFGDef('queryLimit', 0))
         );

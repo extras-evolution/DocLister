@@ -79,9 +79,7 @@ class shopkeeperDocLister extends site_contentDocLister
                         $item = $extUser->setUserData($item); //[+user.id.createdby+], [+user.fullname.publishedby+], [+dl.user.publishedby+]....
                     }
 
-                    if ($extSummary) {
-                        $item['summary'] = $extSummary->init($this, array("content" => $item['content'], "summary" => $this->getCFGDef("summary", "")));
-                    }
+                    $item['summary'] = $extSummary ? $this->getSummary($item, $extSummary, '', 'content') : '';
 
                     $item = array_merge($item, $sysPlh); //inside the chunks available all placeholders set via $modx->toPlaceholders with prefix id, and with prefix sysKey
 
@@ -126,6 +124,9 @@ class shopkeeperDocLister extends site_contentDocLister
                     }
                     if($extPrepare){
                         $item = $extPrepare->init($this, $item);
+                        if(is_bool($item) && $item === false){
+                            continue;
+                        }
                     }
                     $tmp = $this->parseChunk($subTpl, $item);
 
@@ -182,9 +183,15 @@ class shopkeeperDocLister extends site_contentDocLister
                 switch($this->getCFGDef('idType', 'parents')){
                     case 'parents':{
                         if($this->getCFGDef('showParent', '0')) {
-                            $whereArr[]="(c.parent IN ({$sanitarInIDs}) OR c.id IN({$sanitarInIDs}))";
+                            $tmpWhere="(c.parent IN ({$sanitarInIDs}) OR c.id IN({$sanitarInIDs}))";
                         }else{
-                            $whereArr[]="c.parent IN ({$sanitarInIDs}) AND c.id NOT IN({$sanitarInIDs})";
+                            $tmpWhere="c.parent IN ({$sanitarInIDs}) AND c.id NOT IN({$sanitarInIDs})";
+                        }
+                        if(($addDocs = $this->getCFGDef('documents', '')) != ''){
+                            $addDocs = $this->sanitarIn($this->cleanIDs($addDocs));
+                            $whereArr[] = "((".$tmpWhere.") OR c.id IN({$addDocs}))";
+                        }else{
+                            $whereArr[] = $tmpWhere;
                         }
                         break;
                     }
@@ -312,14 +319,20 @@ class shopkeeperDocLister extends site_contentDocLister
         $sort = $this->SortOrderSQL("c.createdon");
         list($from, $sort) = $this->injectSortByTV($tbl_site_content.' '.$this->_filters['join'], $sort);
 
-        $where = "WHERE {$where} c.parent IN (" . $this->sanitarIn($this->IDs) . ")";
+        $tmpWhere = "c.parent IN (" . $this->sanitarIn($this->IDs) . ")";
+        $tmpWhere .= (($this->getCFGDef('showParent', '0')) ? "" : " AND c.id NOT IN(" . $this->sanitarIn($this->IDs) . ")");
+
+        if(($addDocs = $this->getCFGDef('documents', '')) != ''){
+            $addDocs = $this->sanitarIn($this->cleanIDs($addDocs));
+            $tmpWhere = "((".$tmpWhere.") OR c.id IN({$addDocs}))";
+        }
+        $where = "WHERE {$where} {$tmpWhere}";
         if(!$this->getCFGDef('showNoPublish', 0)){
             $where .= " AND c.published=1";
         }
         $fields = $this->getCFGDef('selectFields', 'c.*');
 		
         $sql = $this->dbQuery("SELECT DISTINCT ".$fields." FROM ".$from." ".$where." ".
-                (($this->getCFGDef('showParent', '0')) ? "" : "AND c.id NOT IN(" . $this->sanitarIn($this->IDs) . ") ") .
                 $sort . " " .
                 $this->LimitSQL($this->getCFGDef('queryLimit', 0))
         );

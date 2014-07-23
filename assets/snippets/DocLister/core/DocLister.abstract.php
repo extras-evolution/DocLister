@@ -28,7 +28,7 @@ abstract class DocLister
     /**
      * Текущая версия ядра DocLister
      */
-    const VERSION = '1.4.0';
+    const VERSION = '1.4.5';
 
     /**
      * Ключ в массиве $_REQUEST в котором находится алиас запрашиваемого документа
@@ -196,12 +196,23 @@ abstract class DocLister
 
         if ($this->checkDL()) {
             $cfg = array();
-            if (($IDs = $this->getCFGDef('documents', '')) != '' || $this->getCFGDef('idType', '') == 'documents') {
-                $cfg['idType'] = "documents";
-            } else {
-                $cfg['idType'] = "parents";
-                if (($IDs = $this->getCFGDef('parents')) === null) {
-                    $IDs = $this->modx->documentIdentifier;
+            $idType = $this->getCFGDef('idType', '');
+            if(empty($idType) && $this->getCFGDef('documents', '') != ''){
+                $idType = 'documents';
+            }
+            switch($idType){
+                case 'documents':{
+                    $IDs = $this->getCFGDef('documents');
+                    $cfg['idType'] = "documents";
+                    break;
+                }
+                case 'parents':
+                default:{
+                    $cfg['idType'] = "parents";
+                    if (($IDs = $this->getCFGDef('parents')) === null) {
+                        $IDs = $this->modx->documentObject['id'];
+                    }
+                    break;
                 }
             }
             $this->setConfig($cfg);
@@ -478,6 +489,9 @@ abstract class DocLister
         } else {
             $out = $this->_render($tpl);
         }
+		
+		$out = DLTemplate::getInstance($this->modx)->parseDocumentSource($out);
+		
         $this->debug->debugEnd('render');
         return $out;
     }
@@ -799,9 +813,10 @@ abstract class DocLister
      *
      * @param string $name Template: chunk name || @CODE: template || @FILE: file with template
      * @param array $data paceholder
+     * @param bool $parseDocumentSource render html template via DocumentParser::parseDocumentSource()
      * @return string html template with data without placeholders
      */
-    public function parseChunk($name, $data)
+    public function parseChunk($name, $data, $parseDocumentSource = false)
     {
         $out = null;
         $this->debug->debug(
@@ -809,7 +824,7 @@ abstract class DocLister
             "parseChunk",
             2
         );
-        $out = DLTemplate::getInstance($this->getMODX())->parseChunk($name, $data);
+        $out = DLTemplate::getInstance($this->getMODX())->parseChunk($name, $data, $parseDocumentSource);
         if (empty($out)) {
             $this->debug->debug("Empty chunk: ".$this->debug->dumpData($name), '', 2);
         }
@@ -878,6 +893,28 @@ abstract class DocLister
         return $out;
     }
 
+	protected function getSummary(array $item = array(), $extSummary = null, $introField = '', $contentField = ''){
+		$out = '';
+	
+		if(is_null($extSummary)){
+			/**
+			* @var $extSummary summary_DL_Extender
+			*/
+            $extSummary = $this->getExtender('summary');
+		}
+		$introField = $this->getCFGDef("introField", $introField);
+		$contentField = $this->getCFGDef("contentField", $contentField);
+		
+		if (!empty($introField) && !empty($item[$introField]) && mb_strlen($item[$introField], 'UTF-8') > 0) {
+			$out = $item[$introField];
+        } else {
+			if(!empty($contentField) && !empty($item[$contentField]) && mb_strlen($item[$contentField], 'UTF-8') > 0){
+				$out = $extSummary->init($this, array("content" => $item[$contentField], "summary" => $this->getCFGDef("summary", "")));
+			}
+        }
+		return $out;
+	}
+	
     /**
      * @param string $name extender name
      * @return boolean status extender load
