@@ -32,6 +32,9 @@ class prepare_DL_Extender extends extDocLister
                 $names = explode(",", $prepare);
                 foreach($names as $item){
                     $params['data'] = $this->callPrepare($item, $params);
+                    if($params['data'] === false){
+                        break;
+                    }
                 }
             }else{
                 $params['data'] = $this->callPrepare($prepare, $params);
